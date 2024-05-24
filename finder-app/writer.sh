@@ -5,12 +5,17 @@ then
 	exit 1
 fi
 
-echo "arguments: $@"
-
-FILE_NAME=$1
+PATH=$1
 TEXT=$2
+DIRECTORY=${PATH%/*}
+FILENAME=${PATH}
 
-echo "${TEXT}" > "${FILE_NAME}"
+if [ ! -d $DIRECTORY ]
+then 
+	/usr/bin/mkdir -p "$DIRECTORY"
+fi
+
+echo "${TEXT}" > "${FILENAME}"
 if [ $? -ne 0 ]
 then 
 	exit 1

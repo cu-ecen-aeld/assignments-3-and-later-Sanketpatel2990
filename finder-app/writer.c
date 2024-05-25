@@ -12,6 +12,7 @@ int main (int argc, char *argv[])
 	openlog(NULL, 0, LOG_USER);
 	if(argc < 2) {
             syslog(LOG_ERR, "Invalid number of arguments: %d", argc);
+	    closelog();
 	    return 1;
 	}
 	filename = argv[1];
@@ -20,9 +21,11 @@ int main (int argc, char *argv[])
 	if(NULL != fptr) {
 	    fwrite(string, strlen(string), 1, fptr);
 	    fclose(fptr);
-	    return 0;
+	    syslog(LOG_DEBUG, "Writing %s to %s", string, filename);
+   	    closelog();
 	} else {
 	    syslog(LOG_ERR, "Error in file creation");
+	    closelog();
 	    return 1;
 	}
 

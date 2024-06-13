@@ -12,6 +12,7 @@ BUSYBOX_VERSION=1_33_1
 FINDER_APP_DIR=$(realpath $(dirname $0))
 ARCH=arm64
 CROSS_COMPILE=aarch64-none-linux-gnu-
+LIB_DIRECTORY=/home/sesa572376/linux-course
 
 if [ $# -lt 1 ]
 then
@@ -23,7 +24,19 @@ fi
 
 mkdir -p ${OUTDIR}
 
+
 cd "$OUTDIR"
+echo "test begins...."
+SYSROOT=$(${CROSS_COMPILE}gcc --print-sysroot)
+echo $SYSROOT
+
+#cp -r ${SYSROOT}/lib/* ${SYSROOT}/lib64/* ${OUTDIR}/rootfs/lib/
+#cp -r ${SYSROOT}/lib/* ${SYSROOT}/lib64/* ${OUTDIR}/rootfs/lib64/
+
+#ls ${OUTDIR}/rootfs/lib
+#ls ${OUTDIR}/rootfs/lib64
+
+
 if [ ! -d "${OUTDIR}/linux-stable" ]; then
     #Clone only if the repository does not exist.
 	echo "CLONING GIT LINUX STABLE VERSION ${KERNEL_VERSION} IN ${OUTDIR}"
@@ -35,9 +48,22 @@ if [ ! -e ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ]; then
     git checkout ${KERNEL_VERSION}
 
     # TODO: Add your kernel build steps here
+    # do deep clean
+    make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE mrproper
+    # build defaul configs
+    make ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE defconfig
+    #build kernel
+    make -j6 ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE all
+    #build modules
+    #make -j6 ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE modules
+    #build DTB
+    make -j6 ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE dtbs
 fi
-
+sync
 echo "Adding the Image in outdir"
+pwd
+cp ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ${OUTDIR}
+sync
 
 echo "Creating the staging directory for the root filesystem"
 cd "$OUTDIR"
@@ -48,6 +74,9 @@ then
 fi
 
 # TODO: Create necessary base directories
+mkdir -p ${OUTDIR}/rootfs/bin ${OUTDIR}/rootfs/dev  ${OUTDIR}/rootfs/etc ${OUTDIR}/rootfs/home ${OUTDIR}/rootfs/lib ${OUTDIR}/rootfs/lib64 ${OUTDIR}/rootfs/proc ${OUTDIR}/rootfs/sbin ${OUTDIR}/rootfs/sys ${OUTDIR}/rootfs/tmp ${OUTDIR}/rootfs/usr 
+
+mkdir -p ${OUTDIR}/rootfs/usr/bin ${OUTDIR}/rootfs/usr/sbin ${OUTDIR}/rootfs/usr/lib  ${OUTDIR}/rootfs/var/log
 
 cd "$OUTDIR"
 if [ ! -d "${OUTDIR}/busybox" ]
@@ -56,25 +85,54 @@ git clone git://busybox.net/busybox.git
     cd busybox
     git checkout ${BUSYBOX_VERSION}
     # TODO:  Configure busybox
+    make distclean
+    make defconfig
 else
     cd busybox
 fi
 
 # TODO: Make and install busybox
+    make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE}
+    make CONFIG_PREFIX="${OUTDIR}/rootfs" ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE install
 
 echo "Library dependencies"
-${CROSS_COMPILE}readelf -a bin/busybox | grep "program interpreter"
-${CROSS_COMPILE}readelf -a bin/busybox | grep "Shared library"
+#${CROSS_COMPILE}readelf -a /bin/busybox | grep "program interpreter"
+#${CROSS_COMPILE}readelf -a /bin/busybox | grep "Shared library"
 
 # TODO: Add library dependencies to rootfs
+#cp ${LIB_DIRECTORY}/ld-linux-aarch64.so.1 ${LIB_DIRECTORY}/libm.so.6 ${LIB_DIRECTORY}/libc.so.6 ${LIB_DIRECTORY}/libresolv.so.2 ${OUTDIR}/rootfs/lib
+#cp ${LIB_DIRECTORY}/ld-linux-aarch64.so.1 ${LIB_DIRECTORY}/libm.so.6 ${LIB_DIRECTORY}/libc.so.6 ${LIB_DIRECTORY}/libresolv.so.2 ${OUTDIR}/rootfs/lib64
+
+cp -r ${SYSROOT}/lib/* ${SYSROOT}/lib64/* ${OUTDIR}/rootfs/lib/
+cp -r ${SYSROOT}/lib/* ${SYSROOT}/lib64/* ${OUTDIR}/rootfs/lib64/
 
 # TODO: Make device nodes
+sudo mknod -m 666 ${OUTDIR}/rootfs/dev/null c 1 3
+sudo mknod -m 666 ${OUTDIR}/rootfs/dev/console c 5 1
 
 # TODO: Clean and build the writer utility
+cd ${FINDER_APP_DIR}
+make clean
+make CROSS_COMPILE=${CROSS_COMPILE} all
 
 # TODO: Copy the finder related scripts and executables to the /home directory
 # on the target rootfs
+#cd ~/linux-course/assignment-1-Sanketpatel2990/finder-app
+pwd
+cp finder.sh ${OUTDIR}/rootfs/home
+cp finder-test.sh ${OUTDIR}/rootfs/home
+cp writer writer.sh autorun-qemu.sh ${OUTDIR}/rootfs/home
+mkdir -p ${OUTDIR}/rootfs/home/conf
+cp conf/assignment.txt conf/username.txt ${OUTDIR}/rootfs/home/conf
+cp /lib64/*  ${OUTDIR}/rootfs/lib/
+cp /lib64/* ${OUTDIR}/rootfs/lib64/
 
 # TODO: Chown the root directory
+cd ${OUTDIR}/rootfs
+sudo chown -R root:root *
+pwd
+find . | cpio -H newc -ov --owner root:root > ${OUTDIR}/initramfs.cpio
+
 
 # TODO: Create initramfs.cpio.gz
+gzip -f ${OUTDIR}/initramfs.cpio
